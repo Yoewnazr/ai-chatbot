@@ -1,0 +1,21 @@
+# Persekitaran / rahsia
+.env
+
+# Pangkalan data (sejarah perbualan)
+chatbot.db
+chatbot.db-wal
+chatbot.db-shm
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

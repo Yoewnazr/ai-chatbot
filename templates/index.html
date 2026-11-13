@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Chat — Pembantu Pintar</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50: '#eef4ff', 100: '#dbe6fe', 200: '#bfd3fe',
+          300: '#93b4fd', 400: '#6090fa', 500: '#3b82f6',
+          600: '#2570eb', 700: '#1d5fd8', 800: '#1e4faf', 900: '#1e3a8a'
+        },
+        surface: '#212121', surface2: '#171717', surface3: '#2f2f2f',
+        bubbleUser: '#2f2f2f', bubbleAi: '#212121'
+      }
+    }
+  }
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #424242; border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: #525252; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  .fade-in { animation: fadeIn .25s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: none; } }
+
+  .typing-dot { display:inline-block; width:6px; height:6px; border-radius:9999px; background:#9ca3af; margin-right:3px; animation: blink 1.2s infinite; }
+  .typing-dot:nth-child(2){ animation-delay:.2s; } .typing-dot:nth-child(3){ animation-delay:.4s; }
+  @keyframes blink { 0%,80%,100%{opacity:.2;} 40%{opacity:1;} }
+
+  .prose-custom { line-height: 1.7; word-break: break-word; }
+  .prose-custom p { margin: .5rem 0; }
+  .prose-custom h1,.prose-custom h2,.prose-custom h3,.prose-custom h4 { font-weight: 600; margin: 1rem 0 .5rem; }
+  .prose-custom h1 { font-size: 1.5rem; } .prose-custom h2 { font-size: 1.3rem; } .prose-custom h3 { font-size: 1.15rem; }
+  .prose-custom ul { list-style: disc; padding-left: 1.4rem; margin: .5rem 0; }
+  .prose-custom ol { list-style: decimal; padding-left: 1.4rem; margin: .5rem 0; }
+  .prose-custom a { color: #60a5fa; text-decoration: underline; }
+  .prose-custom blockquote { border-left: 3px solid #4b5563; padding-left: .8rem; color: #d1d5db; margin: .5rem 0; }
+  .prose-custom code:not(pre code) { background: #2f2f2f; padding: .15rem .4rem; border-radius: .35rem; font-size: .875em; font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
+  .prose-custom pre { margin: .75rem 0; }
+  .prose-custom table { border-collapse: collapse; margin: .75rem 0; width: 100%; }
+  .prose-custom th,.prose-custom td { border: 1px solid #3f3f3f; padding: .4rem .6rem; }
+  .prose-custom th { background: #2a2a2a; }
+
+  .code-header { display:flex; justify-content:space-between; align-items:center; background:#1a1a1a; padding:.4rem .9rem; border-radius:.5rem .5rem 0 0; font-size:.8rem; color:#9ca3af; }
+  .code-body { margin:0; border-radius:0 0 .5rem .5rem; }
+
+  textarea { resize: none; }
+  .sidebar-item { transition: background .15s; }
+  .sidebar-item:hover { background: rgba(255,255,255,.07); }
+  .sidebar-item.active { background: rgba(255,255,255,.12); }
+</style>
+</head>
+<body class="bg-surface text-gray-100 h-screen overflow-hidden">
+
+
+
+<div class="flex h-screen w-full">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside id="sidebar" class="w-64 shrink-0 bg-surface2 border-r border-black/40 flex-col hidden md:flex">
+    <div class="p-3">
+      <button id="newChatBtn" class="w-full flex items-center justify-between gap-2 rounded-lg border border-white/15 px-3 py-2.5 text-sm hover:bg-white/10 transition">
+        <span><i class="fa-solid fa-plus mr-2"></i>Perbualan Baharu</span>
+        <i class="fa-solid fa-pen-to-square text-xs opacity-60"></i>
+      </button>
+    </div>
+
+    <div class="px-3 pb-2 text-xs text-gray-400 font-medium">Sejarah</div>
+    <nav id="convList" class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5"></nav>
+
+    <div class="border-t border-black/40 p-3">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-sm font-semibold">AI</div>
+        <div class="min-w-0">
+          <div class="text-sm font-medium truncate">Pembantu AI</div>
+          <div class="text-xs text-gray-400" id="modelBadge">...</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MOBILE SIDEBAR OVERLAY ============ -->
+  <div id="sidebarOverlay" class="fixed inset-0 bg-black/60 z-30 hidden md:hidden" onclick="toggleSidebar(false)"></div>
+
+  <!-- ============ MAIN ============ -->
+  <main class="flex-1 flex flex-col min-w-0">
+
+    <!-- Header -->
+    <header class="h-14 shrink-0 flex items-center gap-2 px-3 border-b border-black/40">
+      <button id="menuBtn" class="md:hidden p-2 rounded-lg hover:bg-white/10" onclick="toggleSidebar(true)">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <h1 id="convTitle" class="text-base font-semibold truncate">Perbualan Baharu</h1>
+      <div class="ml-auto flex items-center gap-1">
+        <button id="exportBtn" title="Eksport sebagai Markdown" class="p-2 rounded-lg hover:bg-white/10">
+          <i class="fa-solid fa-download"></i>
+        </button>
+        <button id="deleteBtn" title="Padam perbualan" class="p-2 rounded-lg hover:bg-white/10 text-red-400">
+          <i class="fa-regular fa-trash-can"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Messages -->
+    <div id="messages" class="flex-1 overflow-y-auto scroll-smooth"></div>
+
+    <!-- Composer -->
+    <div class="shrink-0 px-4 pb-4 pt-2 max-w-3xl w-full mx-auto">
+      <!-- Preview imej -->
+      <div id="imagePreviewWrap" class="hidden mb-2 flex flex-wrap gap-2"></div>
+
+      <div class="relative rounded-2xl border border-white/15 bg-surface2 shadow-lg">
+        <div id="dropHint" class="hidden absolute inset-0 rounded-2xl bg-brand-600/20 border-2 border-dashed border-brand-400 z-10 items-center justify-center text-sm font-medium">
+          Lepaskan imej di sini
+        </div>
+        <textarea id="input" rows="1" placeholder="Hantar mesej kepada pembantu AI..." class="w-full bg-transparent px-4 pt-3.5 pb-3 pr-12 text-sm outline-none placeholder-gray-500 max-h-48"></textarea>
+        <div class="flex items-center gap-1 px-2 pb-2">
+          <button id="attachBtn" title="Tambah imej" class="p-2 rounded-lg hover:bg-white/10 text-gray-400">
+            <i class="fa-solid fa-paperclip"></i>
+          </button>
+          <input type="file" id="fileInput" accept="image/*" class="hidden" />
+          <span class="text-[11px] text-gray-500 ml-auto hidden sm:block">AI boleh tersilap. Semak maklumat penting.</span>
+        </div>
+        <button id="sendBtn" class="absolute right-3 bottom-3 w-9 h-9 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white flex items-center justify-center transition">
+          <i id="sendIcon" class="fa-solid fa-arrow-up"></i>
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
+
+
+
+<script>
+/* ============================================================
+   STATE (dalam memori sahaja; pengekalan di IndexedDB)
+============================================================ */
+const state = {
+  conversations: [],   // [{id, title, updatedAt}]
+  currentId: null,     // id perbualan aktif (null = belum disimpan)
+  messages: [],        // mesej aktif [{role, content}]
+  streaming: false,
+  controller: null,    // AbortController untuk berhenti
+  attachedImages: [],  // [{dataUrl, name}]
+  sidebarVisible: false,
+};
+
+const $ = (id) => document.getElementById(id);
+const messagesEl = $('messages');
+const inputEl = $('input');
+const sendBtn = $('sendBtn');
+const sendIcon = $('sendIcon');
+const convListEl = $('convList');
+const convTitleEl = $('convTitle');
+const imagePreviewWrap = $('imagePreviewWrap');
+const modelBadge = $('modelBadge');
+
+// Marked config
+marked.setOptions({ breaks: true, gfm: true });
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderMarkdown(text) {
+  return marked.parse(text || '');
+}
+
+function autoResize() {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 192) + 'px';
+}
+
+function scrollToBottom(force) {
+  if (force || !state.streaming) {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+
+
+/* ============================================================
+   INDEXEDDB STORAGE (penyimpanan sebelah klien)
+============================================================ */
+const DB_NAME = 'ai-chat-db';
+const DB_VERSION = 1;
+let db = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    if (db) return resolve(db);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('conversations')) {
+        d.createObjectStore('conversations', { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbPut(store, value) {
+  return openDB().then(d => new Promise((resolve, reject) => {
+    const tx = d.transaction(store, 'readwrite');
+    tx.objectStore(store).put(value);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+function dbGet(store, key) {
+  return openDB().then(d => new Promise((resolve, reject) => {
+    const tx = d.transaction(store, 'readonly');
+    const r = tx.objectStore(store).get(key);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  }));
+}
+
+function dbGetAll(store) {
+  return openDB().then(d => new Promise((resolve, reject) => {
+    const tx = d.transaction(store, 'readonly');
+    const r = tx.objectStore(store).getAll();
+    r.onsuccess = () => resolve(r.result || []);
+    r.onerror = () => reject(r.error);
+  }));
+}
+
+function dbDelete(store, key) {
+  return openDB().then(d => new Promise((resolve, reject) => {
+    const tx = d.transaction(store, 'readwrite');
+    tx.objectStore(store).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+/* Simpan perbualan penuh (meta + mesej) ke IndexedDB.
+   Mesej termasuk imej base64 disimpan tanpa had kuota localStorage. */
+async function persistConversation() {
+  if (!state.currentId) return;
+  const conv = state.conversations.find(c => c.id === state.currentId);
+  if (!conv) return;
+  conv.updatedAt = Date.now();
+  await dbPut('conversations', {
+    id: conv.id,
+    title: conv.title,
+    updatedAt: conv.updatedAt,
+    messages: state.messages.map(m => ({ role: m.role, content: m.content }))
+  });
+}
+
+async function loadAllConversations() {
+  const all = await dbGetAll('conversations');
+  state.conversations = all
+    .map(c => ({ id: c.id, title: c.title, updatedAt: c.updatedAt || 0 }))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+  renderSidebar();
+}
+
+function createLocalConversation(title) {
+  const id = crypto.randomUUID ? crypto.randomUUID() : ('c' + Date.now() + Math.random().toString(36).slice(2));
+  const conv = { id, title: title || 'Perbualan Baharu', updatedAt: Date.now() };
+  state.conversations.unshift(conv);
+  return conv;
+}
+
+
+
+/* ============================================================
+   RENDER MESSAGES
+============================================================ */
+function messageHTML(msg, idx) {
+  if (msg.role === 'user') {
+    const images = (msg.content && Array.isArray(msg.content))
+      ? msg.content.filter(p => p.type === 'image_url')
+      : [];
+    const text = (msg.content && Array.isArray(msg.content))
+      ? msg.content.filter(p => p.type === 'text').map(p => p.text).join('\n')
+      : (typeof msg.content === 'string' ? msg.content : '');
+
+    const imgs = images.map(im => {
+      const src = im.image_url && im.image_url.url ? im.image_url.url : '';
+      return `<img src="${src}" class="rounded-lg max-h-64 border border-white/10" alt="imej" />`;
+    }).join('');
+
+    return `
+      <div class="fade-in flex justify-end px-2 py-1" data-idx="${idx}">
+        <div class="max-w-[85%] md:max-w-[75%]">
+          ${imgs ? `<div class="mb-1.5 flex justify-end gap-2 flex-wrap">${imgs}</div>` : ''}
+          ${text ? `<div class="bg-bubbleUser rounded-2xl rounded-br-md px-4 py-2.5 text-sm whitespace-pre-wrap">${escapeHtml(text)}</div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  // assistant
+  const text = typeof msg.content === 'string' ? msg.content : '';
+  return `
+    <div class="fade-in flex px-2 py-1" data-idx="${idx}">
+      <div class="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center shrink-0 mr-3 mt-0.5 text-xs font-bold">AI</div>
+      <div class="max-w-[85%] md:max-w-[75%] prose-custom text-sm">
+        <div class="msg-content">${renderMarkdown(text)}</div>
+        <div class="msg-actions flex items-center gap-1 mt-1.5 text-xs text-gray-400 opacity-0 hover:opacity-100 transition">
+          <button class="copy-btn p-1.5 rounded hover:bg-white/10" title="Salin"><i class="fa-regular fa-copy"></i></button>
+          <button class="regen-btn p-1.5 rounded hover:bg-white/10" title="Jana semula"><i class="fa-solid fa-rotate-right"></i></button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderMessages() {
+  if (!state.messages.length) {
+    messagesEl.innerHTML = emptyStateHTML();
+    return;
+  }
+  messagesEl.innerHTML = state.messages.map((m, i) => messageHTML(m, i)).join('');
+  enhanceCodeBlocks();
+  bindMessageActions();
+  scrollToBottom(true);
+}
+
+function emptyStateHTML() {
+  return `
+    <div class="h-full flex flex-col items-center justify-center px-6 text-center">
+      <div class="w-14 h-14 rounded-full bg-brand-600 flex items-center justify-center text-2xl mb-4">
+        <i class="fa-solid fa-robot"></i>
+      </div>
+      <h2 class="text-2xl font-semibold mb-2">Apa yang boleh saya bantu hari ini?</h2>
+      <p class="text-gray-400 mb-8 max-w-md text-sm">Tanya apa sahaja, hantar imej untuk dianalisis, atau minta saya menulis kod.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg">
+        ${suggestionChip('Jelaskan konsep pembelajaran mesin dengan ringkas', 'fa-brain')}
+        ${suggestionChip('Tulis fungsi Python untuk menyusun senarai', 'fa-code')}
+        ${suggestionChip('Huraikan cara membuat resume yang menarik', 'fa-file-lines')}
+        ${suggestionChip('Terangkan teori relativiti secara mudah', 'fa-lightbulb')}
+      </div>
+    </div>`;
+}
+
+function suggestionChip(text, icon) {
+  return `
+    <button class="suggestion-btn text-left border border-white/15 rounded-xl px-4 py-3 text-sm hover:bg-white/5 transition flex items-start gap-2.5">
+      <i class="fa-solid ${icon} text-brand-400 mt-0.5"></i>
+      <span>${escapeHtml(text)}</span>
+    </button>`;
+}
+
+function enhanceCodeBlocks() {
+  document.querySelectorAll('.msg-content pre').forEach(pre => {
+    const code = pre.querySelector('code');
+    if (!code) return;
+    const lang = (code.className.match(/language-([\w-]+)/) || [])[1] || '';
+    if (lang) hljs.highlightElement(code);
+
+    const header = document.createElement('div');
+    header.className = 'code-header';
+    header.innerHTML = `<span>${escapeHtml(lang || 'code')}</span><button class="copy-code-btn hover:text-white"><i class="fa-regular fa-copy"></i> Salin</button>`;
+    pre.before(header);
+
+    header.querySelector('.copy-code-btn').addEventListener('click', () => {
+      navigator.clipboard.writeText(code.innerText).then(() => {
+        header.querySelector('.copy-code-btn').innerHTML = '<i class="fa-solid fa-check"></i> Disalin!';
+        setTimeout(() => header.querySelector('.copy-code-btn').innerHTML = '<i class="fa-regular fa-copy"></i> Salin', 1500);
+      });
+    });
+  });
+}
+
+function bindMessageActions() {
+  document.querySelectorAll('.fade-in[data-idx]').forEach(row => {
+    const idx = Number(row.dataset.idx);
+    if (state.messages[idx].role !== 'assistant') return;
+    const copyBtn = row.querySelector('.copy-btn');
+    const regenBtn = row.querySelector('.regen-btn');
+    if (copyBtn) copyBtn.addEventListener('click', () => copyAssistant(idx));
+    if (regenBtn) regenBtn.addEventListener('click', () => regenerate(idx));
+  });
+}
+
+function copyAssistant(i) {
+  const text = typeof state.messages[i].content === 'string' ? state.messages[i].content : '';
+  navigator.clipboard.writeText(text);
+  showToast('Disalin ke papan keratan');
+}
+
+
+
+/* ============================================================
+   SIDEBAR
+============================================================ */
+function renderSidebar() {
+  if (!state.conversations.length) {
+    convListEl.innerHTML = `<div class="text-center text-xs text-gray-500 py-4">Tiada perbualan lagi</div>`;
+    return;
+  }
+  convListEl.innerHTML = state.conversations.map(c => `
+    <div class="sidebar-item group flex items-center gap-2 rounded-lg px-3 py-2 cursor-pointer ${c.id === state.currentId ? 'active' : ''}" data-id="${c.id}">
+      <i class="fa-regular fa-message text-xs text-gray-500"></i>
+      <span class="flex-1 text-sm truncate">${escapeHtml(c.title)}</span>
+      <button class="rename-btn opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/15 text-gray-400" title="Namakan semula">
+        <i class="fa-solid fa-pencil text-xs"></i>
+      </button>
+      <button class="del-btn opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/15 text-gray-400" title="Padam">
+        <i class="fa-regular fa-trash-can text-xs"></i>
+      </button>
+    </div>`).join('');
+
+  convListEl.querySelectorAll('.sidebar-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.rename-btn') || e.target.closest('.del-btn')) return;
+      loadConversation(el.dataset.id);
+    });
+    el.querySelector('.rename-btn').addEventListener('click', () => renameConversation(el.dataset.id));
+    el.querySelector('.del-btn').addEventListener('click', () => deleteConversation(el.dataset.id));
+  });
+}
+
+function toggleSidebar(show) {
+  state.sidebarVisible = show;
+  const sidebar = $('sidebar');
+  const overlay = $('sidebarOverlay');
+  if (show) {
+    sidebar.classList.remove('hidden');
+    sidebar.classList.add('fixed', 'inset-y-0', 'left-0', 'z-40', 'flex');
+    overlay.classList.remove('hidden');
+  } else {
+    sidebar.classList.add('hidden');
+    sidebar.classList.remove('fixed', 'inset-y-0', 'left-0', 'z-40', 'flex');
+    overlay.classList.add('hidden');
+  }
+}
+
+function refreshSidebar() {
+  loadAllConversations().catch(() => {});
+}
+
+
+/* ============================================================
+   TOAST
+============================================================ */
+function showToast(msg) {
+  let toast = $('toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.className = 'fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-surface3 border border-white/15 rounded-lg px-4 py-2 text-sm shadow-xl transition-opacity';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+}
+
+
+/* ============================================================
+   CONVERSATION ACTIONS (IndexedDB, bukan API)
+============================================================ */
+function newChat() {
+  state.currentId = null;
+  state.messages = [];
+  state.attachedImages = [];
+  clearImagePreviews();
+  convTitleEl.textContent = 'Perbualan Baharu';
+  renderMessages();
+  renderSidebar();
+  inputEl.focus();
+}
+
+async function loadConversation(id) {
+  try {
+    const conv = await dbGet('conversations', id);
+    if (!conv) throw new Error('not found');
+    state.currentId = id;
+    state.messages = (conv.messages || []).map(m => ({ role: m.role, content: m.content }));
+    state.attachedImages = [];
+    clearImagePreviews();
+    convTitleEl.textContent = conv.title || 'Perbualan';
+    renderMessages();
+    renderSidebar();
+    toggleSidebar(false);
+  } catch (e) {
+    showToast('Gagal memuat perbualan');
+  }
+}
+
+async function renameConversation(id) {
+  const c = state.conversations.find(x => x.id === id);
+  const name = prompt('Namakan semula perbualan:', c ? c.title : '');
+  if (!name || !name.trim()) return;
+  const conv = await dbGet('conversations', id);
+  if (conv) {
+    conv.title = name.trim();
+    await dbPut('conversations', conv);
+  }
+  const meta = state.conversations.find(x => x.id === id);
+  if (meta) meta.title = name.trim();
+  if (id === state.currentId) convTitleEl.textContent = name.trim();
+  renderSidebar();
+}
+
+async function deleteConversation(id) {
+  const c = state.conversations.find(x => x.id === id);
+  if (!confirm(`Padam perbualan "${c ? c.title : ''}"?`)) return;
+  await dbDelete('conversations', id);
+  state.conversations = state.conversations.filter(x => x.id !== id);
+  if (id === state.currentId) {
+    state.currentId = null;
+    state.messages = [];
+    convTitleEl.textContent = 'Perbualan Baharu';
+    renderMessages();
+  }
+  renderSidebar();
+}
+
+function ensureConversation() {
+  if (state.currentId) return Promise.resolve(state.currentId);
+  const conv = createLocalConversation('Perbualan Baharu');
+  state.currentId = conv.id;
+  renderSidebar();
+  return Promise.resolve(conv.id);
+}
+
+
+
+/* ============================================================
+   CHAT LOGIC
+============================================================ */
+async function sendMessage() {
+  const text = inputEl.value.trim();
+  if ((!text && !state.attachedImages.length) || state.streaming) return;
+
+  // Bina content user
+  let userContent = text;
+  if (state.attachedImages.length) {
+    const parts = [];
+    if (text) parts.push({ type: 'text', text });
+    state.attachedImages.forEach(img => {
+      parts.push({ type: 'image_url', image_url: { url: img.dataUrl } });
+    });
+    userContent = parts;
+  }
+
+  // Pastikan perbualan wujud (buat baru jika perlu)
+  await ensureConversation();
+
+  // Tambah mesej user ke UI + state
+  state.messages.push({ role: 'user', content: userContent });
+  renderMessages();
+
+  // Kosongkan input & imej
+  inputEl.value = '';
+  autoResize();
+  state.attachedImages = [];
+  clearImagePreviews();
+  updateSendBtn();
+
+  // Auto-title: gunakan 40 aksara pertama mesej pertama
+  autoTitle(text);
+
+  // Simpan segera ke IndexedDB (sebelum respons AI)
+  await persistConversation();
+  refreshSidebar();
+
+  await runAssistant();
+}
+
+function autoTitle(text) {
+  const c = state.conversations.find(x => x.id === state.currentId);
+  if (c && c.title === 'Perbualan Baharu' && text) {
+    c.title = text.slice(0, 40) + (text.length > 40 ? '…' : '');
+    convTitleEl.textContent = c.title;
+  }
+}
+
+async function runAssistant() {
+  state.streaming = true;
+  updateSendBtn();
+
+  // Tambah placeholder assistant
+  const placeholderIdx = state.messages.length;
+  state.messages.push({ role: 'assistant', content: '' });
+  renderMessages();
+
+  // Tandakan elemen content aktif
+  const assistantEl = messagesEl.querySelector(`[data-idx="${placeholderIdx}"] .msg-content`);
+  let full = '';
+
+  // Hantar SEMUA mesej kecuali placeholder (yang terakhir)
+  const apiMessages = state.messages
+    .slice(0, -1)
+    .map(m => ({ role: m.role, content: m.content }));
+
+  state.controller = new AbortController();
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: apiMessages,
+        stream: true
+      }),
+      signal: state.controller.signal
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Ralat pelayan');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop();
+
+      for (const part of parts) {
+        if (!part.startsWith('data: ')) continue;
+        let payload;
+        try { payload = JSON.parse(part.slice(6)); }
+        catch { continue; }
+
+        if (payload.error) {
+          throw new Error(payload.error);
+        }
+        if (payload.delta) {
+          full += payload.delta;
+          if (assistantEl) assistantEl.innerHTML = renderMarkdown(full);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+        if (payload.done) {
+          full = payload.full || full;
+        }
+      }
+    }
+
+    state.messages[placeholderIdx].content = full;
+    renderMessages();
+
+    if (!full) {
+      state.messages[placeholderIdx].content = '(Tiada respons diterima)';
+      renderMessages();
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      state.messages[placeholderIdx].content = full || '(Dijana sebahagian — dihentikan)';
+    } else {
+      state.messages[placeholderIdx].content = `⚠️ Ralat: ${err.message}`;
+    }
+    renderMessages();
+  } finally {
+    state.streaming = false;
+    state.controller = null;
+    updateSendBtn();
+    // Simpan mesej akhir (termasuk respons AI) ke IndexedDB
+    await persistConversation();
+    refreshSidebar();
+  }
+}
+
+function regenerate(i) {
+  if (state.streaming) return;
+  // Cari mesej user terakhir SEBELUM assistant index i
+  let userIdx = i - 1;
+  while (userIdx >= 0 && state.messages[userIdx].role !== 'user') userIdx--;
+  if (userIdx < 0) return;
+
+  // Buang semua mesej dari assistant index i ke hujung
+  state.messages = state.messages.slice(0, userIdx + 1);
+  renderMessages();
+  runAssistant();
+}
+
+function stopStreaming() {
+  if (state.controller) {
+    state.controller.abort();
+  }
+}
+
+function updateSendBtn() {
+  const hasText = inputEl.value.trim().length > 0 || state.attachedImages.length > 0;
+  if (state.streaming) {
+    sendBtn.disabled = false;
+    sendIcon.className = 'fa-solid fa-stop';
+    sendBtn.onclick = stopStreaming;
+  } else {
+    sendBtn.disabled = !hasText;
+    sendIcon.className = 'fa-solid fa-arrow-up';
+    sendBtn.onclick = sendMessage;
+  }
+}
+
+
+
+/* ============================================================
+   IMAGE HANDLING
+============================================================ */
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (file.size > 20 * 1024 * 1024) {
+      reject(new Error('Imej terlalu besar (had 20MB)'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addImageFile(file) {
+  try {
+    const dataUrl = await fileToDataUrl(file);
+    state.attachedImages.push({ dataUrl, name: file.name });
+    renderImagePreviews();
+    updateSendBtn();
+  } catch (err) {
+    showToast(err.message || 'Gagal memuat imej');
+  }
+}
+
+function renderImagePreviews() {
+  if (!state.attachedImages.length) {
+    clearImagePreviews();
+    return;
+  }
+  imagePreviewWrap.classList.remove('hidden');
+  imagePreviewWrap.innerHTML = state.attachedImages.map((img, i) => `
+    <div class="relative group">
+      <img src="${img.dataUrl}" class="h-20 w-20 object-cover rounded-xl border border-white/10" alt="${escapeHtml(img.name)}"/>
+      <button class="remove-img absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white text-xs flex items-center justify-center hover:bg-red-600" data-i="${i}">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>`).join('');
+
+  imagePreviewWrap.querySelectorAll('.remove-img').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.attachedImages.splice(Number(btn.dataset.i), 1);
+      renderImagePreviews();
+      updateSendBtn();
+    });
+  });
+}
+
+function clearImagePreviews() {
+  imagePreviewWrap.classList.add('hidden');
+  imagePreviewWrap.innerHTML = '';
+}
+
+/* ============================================================
+   EXPORT
+============================================================ */
+function exportMarkdown() {
+  if (!state.messages.length) { showToast('Tiada mesej untuk dieksport'); return; }
+  const lines = [];
+  state.messages.forEach(m => {
+    if (m.role === 'user') {
+      const text = typeof m.content === 'string' ? m.content
+        : (Array.isArray(m.content) ? m.content.filter(p => p.type === 'text').map(p => p.text).join(' ') : '');
+      if (text) lines.push(`**Anda:** ${text}`);
+    } else {
+      const text = typeof m.content === 'string' ? m.content : '';
+      if (text) lines.push(`**AI:**\n\n${text}`);
+    }
+  });
+  const md = lines.join('\n\n---\n\n');
+  const blob = new Blob([md], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(convTitleEl.textContent || 'perbualan').replace(/[\\/:*?"<>|]/g, '_')}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ============================================================
+   EVENT LISTENERS & INIT
+============================================================ */
+inputEl.addEventListener('input', () => { autoResize(); updateSendBtn(); });
+
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+$('newChatBtn').addEventListener('click', newChat);
+$('exportBtn').addEventListener('click', exportMarkdown);
+$('deleteBtn').addEventListener('click', () => {
+  if (state.currentId) deleteConversation(state.currentId);
+  else showToast('Tiada perbualan aktif');
+});
+
+$('attachBtn').addEventListener('click', () => $('fileInput').click());
+$('fileInput').addEventListener('change', (e) => {
+  [...e.target.files].forEach(f => addImageFile(f));
+  e.target.value = '';
+});
+
+// Drag & drop imej
+const composer = document.querySelector('.relative.rounded-2xl');
+const dropHint = $('dropHint');
+['dragenter', 'dragover'].forEach(ev => composer.addEventListener(ev, (e) => {
+  e.preventDefault();
+  dropHint.classList.remove('hidden');
+  dropHint.classList.add('flex');
+}));
+['dragleave', 'drop'].forEach(ev => composer.addEventListener(ev, (e) => {
+  e.preventDefault();
+  dropHint.classList.add('hidden');
+  dropHint.classList.remove('flex');
+}));
+composer.addEventListener('drop', (e) => {
+  const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+  files.forEach(f => addImageFile(f));
+});
+
+// Paste imej
+document.addEventListener('paste', (e) => {
+  const items = [...(e.clipboardData?.items || [])].filter(i => i.type.startsWith('image/'));
+  items.forEach(item => {
+    const file = item.getAsFile();
+    if (file) addImageFile(file);
+  });
+});
+
+// Suggestion chips (guna event delegation)
+messagesEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.suggestion-btn');
+  if (btn) {
+    inputEl.value = btn.innerText.trim();
+    autoResize();
+    updateSendBtn();
+    sendMessage();
+  }
+});
+
+// Init (muat perbualan daripada IndexedDB)
+updateSendBtn();
+renderMessages();
+loadAllConversations().catch(() => {});
+
+// Tunjukkan model aktif
+fetch('/api/config')
+  .then(r => r.json())
+  .then(cfg => { modelBadge.textContent = cfg.model || 'Bersedia'; })
+  .catch(() => { modelBadge.textContent = 'Bersedia'; });
+</script>
+</body>
+</html>
+
