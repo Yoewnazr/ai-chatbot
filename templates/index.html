@@ -2,8 +2,16 @@
 <html lang="ms">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#2570eb" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="AI Chat" />
 <title>AI Chat — Pembantu Pintar</title>
+<link rel="manifest" href="/manifest.json" />
+<link rel="icon" type="image/svg+xml" href="/static/icon.svg" />
+<link rel="apple-touch-icon" href="/static/icon-192.png" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
 tailwind.config = {
@@ -31,6 +39,10 @@ tailwind.config = {
   :root { color-scheme: dark; }
   html, body { height: 100%; }
   body { font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+  .app-height { height: 100vh; height: 100dvh; }
+  .safe-bottom { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-area-bottom { height: env(safe-area-inset-bottom); }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: #424242; border-radius: 6px; }
   ::-webkit-scrollbar-thumb:hover { background: #525252; }
@@ -66,11 +78,11 @@ tailwind.config = {
   .sidebar-item.active { background: rgba(255,255,255,.12); }
 </style>
 </head>
-<body class="bg-surface text-gray-100 h-screen overflow-hidden">
+<body class="bg-surface text-gray-100 app-height overflow-hidden">
 
 
 
-<div class="flex h-screen w-full">
+<div class="flex app-height w-full">
 
   <!-- ============ SIDEBAR ============ -->
   <aside id="sidebar" class="w-64 shrink-0 bg-surface2 border-r border-black/40 flex-col hidden md:flex">
@@ -91,6 +103,13 @@ tailwind.config = {
           <div class="text-sm font-medium truncate">Pembantu AI</div>
           <div class="text-xs text-gray-400" id="modelBadge">...</div>
         </div>
+      </div>
+      <button id="installBtn" class="hidden w-full mt-3 items-center justify-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm hover:bg-white/10 transition">
+        <i class="fa-solid fa-download"></i> Install App
+      </button>
+      <div id="iosInstallTip" class="hidden mt-3 text-[11px] text-gray-500 leading-relaxed">
+        Untuk pasang di iPhone/iPad: ketik butang <i class="fa-solid fa-arrow-up-from-bracket"></i>
+        <b>Share</b> di Safari, kemudian pilih <b>Add to Home Screen</b>.
       </div>
     </div>
   </aside>
@@ -121,7 +140,7 @@ tailwind.config = {
     <div id="messages" class="flex-1 overflow-y-auto scroll-smooth"></div>
 
     <!-- Composer -->
-    <div class="shrink-0 px-4 pb-4 pt-2 max-w-3xl w-full mx-auto">
+    <div class="shrink-0 px-4 pt-2 max-w-3xl w-full mx-auto safe-bottom">
       <!-- Preview imej -->
       <div id="imagePreviewWrap" class="hidden mb-2 flex flex-wrap gap-2"></div>
 
@@ -191,6 +210,30 @@ function scrollToBottom(force) {
   if (force || !state.streaming) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
+}
+
+/* Pastikan pengguna berada di bahagian bawah skrin (dalam toleransi kecil). */
+function isNearBottom() {
+  const gap = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+  return gap < 80;
+}
+
+/* Kemas kini mesej streaming dengan throttle: gunakan requestAnimationFrame
+   supaya marked.parse + innerHTML TIDAK dijalankan pada setiap chunk,
+   mengelakkan jank apabila teks semakin panjang. */
+let streamRenderScheduled = false;
+function scheduleStreamRender(assistantEl, getFull) {
+  if (streamRenderScheduled) return;
+  streamRenderScheduled = true;
+  requestAnimationFrame(() => {
+    streamRenderScheduled = false;
+    const text = getFull();
+    if (assistantEl) assistantEl.innerHTML = renderMarkdown(text);
+    // Auto-scroll hanya jika pengguna berada di bawah (bukan smooth supaya tak bertindih)
+    if (isNearBottom()) {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+  });
 }
 
 function debounce(fn, ms) {
@@ -653,8 +696,7 @@ async function runAssistant() {
         }
         if (payload.delta) {
           full += payload.delta;
-          if (assistantEl) assistantEl.innerHTML = renderMarkdown(full);
-          messagesEl.scrollTop = messagesEl.scrollHeight;
+          scheduleStreamRender(assistantEl, () => full);
         }
         if (payload.done) {
           full = payload.full || full;
@@ -874,6 +916,56 @@ fetch('/api/config')
   .then(r => r.json())
   .then(cfg => { modelBadge.textContent = cfg.model || 'Bersedia'; })
   .catch(() => { modelBadge.textContent = 'Bersedia'; });
+
+/* ============================================================
+   PWA — INSTALL APP & SERVICE WORKER
+============================================================ */
+const installBtn = $('installBtn');
+const iosInstallTip = $('iosInstallTip');
+let deferredPrompt = null;
+
+// Kesan iOS Safari (tidak sokong beforeinstallprompt)
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+  || window.navigator.standalone === true;
+
+if (isIOS && !isStandalone) {
+  iosInstallTip.classList.remove('hidden');
+} else if (!isStandalone) {
+  // Tunjukkan butang install hanya selepas event beforeinstallprompt tersedia
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installBtn.classList.remove('hidden');
+    installBtn.classList.add('flex');
+  });
+}
+
+installBtn.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const choice = await deferredPrompt.userChoice;
+  if (choice.outcome === 'accepted') {
+    showToast('Aplikasi sedang dipasang…');
+  }
+  deferredPrompt = null;
+  installBtn.classList.add('hidden');
+  installBtn.classList.remove('flex');
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  installBtn.classList.add('hidden');
+  installBtn.classList.remove('flex');
+  showToast('Aplikasi berjaya dipasang!');
+});
+
+// Daftar Service Worker (di root)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>

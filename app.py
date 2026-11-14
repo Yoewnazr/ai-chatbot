@@ -1,7 +1,7 @@
 import json
 import os
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -38,6 +38,24 @@ SYSTEM_PROMPT = (
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+# ---------------------------------------------------------------
+# Route: PWA (manifest & service worker di root)
+# ---------------------------------------------------------------
+@app.route("/manifest.json")
+def manifest():
+    return send_from_directory("static", "manifest.json", mimetype="application/manifest+json")
+
+
+@app.route("/sw.js")
+def service_worker():
+    return send_from_directory("static", "sw.js", mimetype="application/javascript")
+
+
+@app.route("/static/<path:filename>")
+def static_files(filename):
+    return send_from_directory("static", filename)
 
 
 @app.route("/api/config")
