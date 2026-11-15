@@ -637,7 +637,7 @@ async function renameConversation(id) {
   if (!name || !name.trim()) return;
 
   if (state.user) {
-    const { error } = await supabase
+    const { error } = await sb
       .from('conversations')
       .update({ title: name.trim(), updated_at: Date.now() })
       .eq('id', id);
@@ -662,7 +662,7 @@ async function deleteConversation(id) {
   const c = state.conversations.find(x => x.id === id);
   if (!confirm(`Padam perbualan "${c ? c.title : ''}"?`)) return;
   if (state.user) {
-    const { error } = await supabase.from('conversations').delete().eq('id', id);
+    const { error } = await sb.from('conversations').delete().eq('id', id);
     if (error) {
       showToast('Gagal memadam: ' + error.message);
       return;
@@ -1252,7 +1252,7 @@ if ('serviceWorker' in navigator) {
 /* ============================================================
    V3 — SUPAABASE: GOOGLE AUTH & CLOUD SYNC
 ============================================================ */
-let supabase = null;          // klien Supabase (dimula selepas /api/config)
+let sb = null;                // klien Supabase (dimula selepas /api/config)
 let supabaseEnabled = false;  // true jika SUPABASE_URL/ANON_KEY disediakan
 let realtimeChannel = null;
 
@@ -1264,13 +1264,13 @@ function initSupabase() {
     return;
   }
   supabaseEnabled = true;
-  supabase = window.supabase.createClient(
+  sb = window.supabase.createClient(
     config.supabase.url,
     config.supabase.anon_key
   );
 
   // Pulih sesi tersedia (refresh token disimpan secara automatik oleh SDK)
-  supabase.auth.getSession().then(({ data }) => {
+  sb.auth.getSession().then(({ data }) => {
     if (data && data.session) {
       setUser(data.session.user, data.session);
     }
@@ -1278,7 +1278,7 @@ function initSupabase() {
   });
 
   // Pantau perubahan status auth (log masuk / log keluar / token refresh)
-  supabase.auth.onAuthStateChange((event, session) => {
+  sb.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_IN' && session) {
       setUser(session.user, session);
     } else if (event === 'SIGNED_OUT') {
@@ -1345,7 +1345,7 @@ async function googleSignIn() {
     showToast('Supabase belum dikonfigurasikan pada pelayan (.env)');
     return;
   }
-  const { error } = await supabase.auth.signInWithOAuth({
+  const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: window.location.origin + '/' },
   });
@@ -1353,15 +1353,15 @@ async function googleSignIn() {
 }
 
 async function signOut() {
-  if (!supabase) return;
-  await supabase.auth.signOut();
+  if (!sb) return;
+  await sb.auth.signOut();
   showToast('Telah log keluar');
 }
 
 function subscribeRealtime() {
-  if (!supabase || realtimeChannel) return;
+  if (!sb || realtimeChannel) return;
   // Channel tunggal; penapis RLS memastikan hanya data sendiri diterima.
-  realtimeChannel = supabase
+  realtimeChannel = sb
     .channel('conversations-realtime')
     .on(
       'postgres_changes',
@@ -1378,15 +1378,15 @@ function subscribeRealtime() {
 
 function unsubscribeRealtime() {
   if (realtimeChannel) {
-    supabase.removeChannel(realtimeChannel);
+    sb.removeChannel(realtimeChannel);
     realtimeChannel = null;
   }
 }
 
 /* Muat semula senarai perbualan dari Supabase. */
 async function loadAllConversationsCloud() {
-  if (!supabase) return;
-  const { data, error } = await supabase
+  if (!sb) return;
+  const { data, error } = await sb
     .from('conversations')
     .select('id,title,updated_at')
     .order('updated_at', { ascending: false });
@@ -1404,8 +1404,8 @@ async function loadAllConversationsCloud() {
 
 /* Simpan meta perbualan + mesejnya ke Supabase (upsert). */
 async function persistConversationCloud(conv, messages) {
-  if (!supabase) return;
-  const convErr = await supabase
+  if (!sb) return;
+  const convErr = await sb
     .from('conversations')
     .upsert({
       id: conv.id,
@@ -1419,7 +1419,7 @@ async function persistConversationCloud(conv, messages) {
   }
   // Padam mesej basi (idx >= panjang semasa) supaya "jana semula" atau pemadaman
   // separa tidak meninggalkan mesej hantu dalam pangkalan data.
-  await supabase
+  await sb
     .from('messages')
     .delete()
     .eq('conversation_id', conv.id)
@@ -1431,7 +1431,7 @@ async function persistConversationCloud(conv, messages) {
       role: m.role,
       content: m.content,
     }));
-    const msgErr = await supabase.from('messages').upsert(rows, { onConflict: 'conversation_id,idx' });
+    const msgErr = await sb.from('messages').upsert(rows, { onConflict: 'conversation_id,idx' });
     if (msgErr.error) {
       showToast('Gagal simpan mesej ke awan: ' + msgErr.error.message);
     }
@@ -1440,7 +1440,7 @@ async function persistConversationCloud(conv, messages) {
 
 /* Muat mesej bagi satu perbualan dari Supabase. */
 async function fetchMessagesCloud(conversationId) {
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from('messages')
     .select('role,content')
     .eq('conversation_id', conversationId)
