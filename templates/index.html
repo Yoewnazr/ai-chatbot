@@ -35,6 +35,7 @@ tailwind.config = {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root { color-scheme: dark; }
   html, body { height: 100%; }
@@ -76,6 +77,16 @@ tailwind.config = {
   .sidebar-item { transition: background .15s; }
   .sidebar-item:hover { background: rgba(255,255,255,.07); }
   .sidebar-item.active { background: rgba(255,255,255,.12); }
+
+  /* V2: Butang mikrofon — denyut merah semasa mendengar */
+  .mic-btn { transition: color .15s, border-color .15s; }
+  .mic-btn.listening { color: #ef4444; }
+  .mic-btn.listening i { animation: micPulse 1.1s infinite; }
+  @keyframes micPulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(239,68,68,0)); }
+    50%      { transform: scale(1.3); filter: drop-shadow(0 0 7px rgba(239,68,68,.95)); }
+  }
+  select { cursor: pointer; }
 </style>
 </head>
 <body class="bg-surface text-gray-100 app-height overflow-hidden">
@@ -97,6 +108,43 @@ tailwind.config = {
     <nav id="convList" class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5"></nav>
 
     <div class="border-t border-black/40 p-3">
+      <div class="text-xs text-gray-400 font-medium mb-2">Watak / Persona</div>
+      <select id="personaSelect" class="w-full appearance-none bg-surface3 border border-white/15 rounded-lg px-2 py-2 text-sm outline-none focus:border-brand-500"></select>
+    </div>
+
+    <div class="border-t border-black/40 p-3 space-y-3">
+
+      <!-- V3: Auth (Google) -->
+      <div id="authGuest">
+        <button id="googleSignInBtn" class="w-full flex items-center justify-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-sm font-medium hover:bg-white/10 transition">
+          <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          </svg>
+          Log Masuk dengan Google
+        </button>
+      </div>
+
+      <div id="authUser" class="hidden">
+        <div class="flex items-center gap-3">
+          <div id="userAvatar" class="w-9 h-9 rounded-full bg-brand-600 flex items-center justify-center text-sm font-semibold overflow-hidden shrink-0">
+            <span>U</span>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div id="userName" class="text-sm font-medium truncate">Pengguna</div>
+            <div id="userEmail" class="text-xs text-gray-400 truncate"></div>
+          </div>
+          <button id="signOutBtn" title="Log Keluar" class="p-2 rounded-lg hover:bg-white/10 text-gray-400">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+          </button>
+        </div>
+        <div id="syncBadge" class="hidden mt-2 text-[11px] text-emerald-400 items-center gap-1.5">
+          <i class="fa-solid fa-cloud"></i> Diselaraskan ke awan
+        </div>
+      </div>
+
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-full bg-brand-600 flex items-center justify-center text-sm font-semibold">AI</div>
         <div class="min-w-0">
@@ -125,8 +173,12 @@ tailwind.config = {
       <button id="menuBtn" class="md:hidden p-2 rounded-lg hover:bg-white/10" onclick="toggleSidebar(true)">
         <i class="fa-solid fa-bars"></i>
       </button>
-      <h1 id="convTitle" class="text-base font-semibold truncate">Perbualan Baharu</h1>
+      <h1 id="convTitle" class="flex-1 min-w-0 text-base font-semibold truncate">Perbualan Baharu</h1>
       <div class="ml-auto flex items-center gap-1">
+        <div class="relative">
+          <select id="modelSelect" title="Pilih model AI" class="appearance-none bg-surface3 border border-white/15 rounded-lg pl-2 pr-7 py-1.5 text-xs outline-none focus:border-brand-500 max-w-[170px]"></select>
+          <i class="fa-solid fa-chevron-down pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-500"></i>
+        </div>
         <button id="exportBtn" title="Eksport sebagai Markdown" class="p-2 rounded-lg hover:bg-white/10">
           <i class="fa-solid fa-download"></i>
         </button>
@@ -153,6 +205,9 @@ tailwind.config = {
           <button id="attachBtn" title="Tambah imej" class="p-2 rounded-lg hover:bg-white/10 text-gray-400">
             <i class="fa-solid fa-paperclip"></i>
           </button>
+          <button id="micBtn" title="Cakap untuk taip (suara)" class="mic-btn p-2 rounded-lg hover:bg-white/10 text-gray-400">
+            <i class="fa-solid fa-microphone"></i>
+          </button>
           <input type="file" id="fileInput" accept="image/*" class="hidden" />
           <span class="text-[11px] text-gray-500 ml-auto hidden sm:block">AI boleh tersilap. Semak maklumat penting.</span>
         </div>
@@ -178,6 +233,10 @@ const state = {
   controller: null,    // AbortController untuk berhenti
   attachedImages: [],  // [{dataUrl, name}]
   sidebarVisible: false,
+  model: '',           // V2: id model aktif (diisi semasa init)
+  persona: 'general',  // V2: id persona aktif
+  listening: false,    // V2: status voice-to-text
+  user: null,          // V3: profil pengguna Supabase (null = guest)
 };
 
 const $ = (id) => document.getElementById(id);
@@ -189,6 +248,9 @@ const convListEl = $('convList');
 const convTitleEl = $('convTitle');
 const imagePreviewWrap = $('imagePreviewWrap');
 const modelBadge = $('modelBadge');
+const modelSelect = $('modelSelect');
+const personaSelect = $('personaSelect');
+const micBtn = $('micBtn');
 
 // Marked config
 marked.setOptions({ breaks: true, gfm: true });
@@ -244,7 +306,8 @@ function debounce(fn, ms) {
 
 
 /* ============================================================
-   INDEXEDDB STORAGE (penyimpanan sebelah klien)
+   INDEXEDDB STORAGE (penyimpanan sebelah klien — untuk GUEST)
+   Pengguna yang log masuk (V3) diselaraskan ke Supabase.
 ============================================================ */
 const DB_NAME = 'ai-chat-db';
 const DB_VERSION = 1;
@@ -308,6 +371,10 @@ async function persistConversation() {
   const conv = state.conversations.find(c => c.id === state.currentId);
   if (!conv) return;
   conv.updatedAt = Date.now();
+  if (state.user) {
+    await persistConversationCloud(conv, state.messages);
+    return;
+  }
   await dbPut('conversations', {
     id: conv.id,
     title: conv.title,
@@ -317,6 +384,10 @@ async function persistConversation() {
 }
 
 async function loadAllConversations() {
+  if (state.user) {
+    await loadAllConversationsCloud();
+    return;
+  }
   const all = await dbGetAll('conversations');
   state.conversations = all
     .map(c => ({ id: c.id, title: c.title, updatedAt: c.updatedAt || 0 }))
@@ -534,13 +605,24 @@ function newChat() {
 
 async function loadConversation(id) {
   try {
-    const conv = await dbGet('conversations', id);
-    if (!conv) throw new Error('not found');
+    let title = 'Perbualan';
+    let messages = [];
+    if (state.user) {
+      const meta = state.conversations.find(x => x.id === id);
+      if (!meta) throw new Error('not found');
+      title = meta.title || 'Perbualan';
+      messages = await fetchMessagesCloud(id);
+    } else {
+      const conv = await dbGet('conversations', id);
+      if (!conv) throw new Error('not found');
+      title = conv.title || 'Perbualan';
+      messages = conv.messages || [];
+    }
     state.currentId = id;
-    state.messages = (conv.messages || []).map(m => ({ role: m.role, content: m.content }));
+    state.messages = messages.map(m => ({ role: m.role, content: m.content }));
     state.attachedImages = [];
     clearImagePreviews();
-    convTitleEl.textContent = conv.title || 'Perbualan';
+    convTitleEl.textContent = title;
     renderMessages();
     renderSidebar();
     toggleSidebar(false);
@@ -553,10 +635,15 @@ async function renameConversation(id) {
   const c = state.conversations.find(x => x.id === id);
   const name = prompt('Namakan semula perbualan:', c ? c.title : '');
   if (!name || !name.trim()) return;
-  const conv = await dbGet('conversations', id);
-  if (conv) {
-    conv.title = name.trim();
-    await dbPut('conversations', conv);
+
+  if (state.user) {
+    await supabase.from('conversations').update({ title: name.trim() }).eq('id', id);
+  } else {
+    const conv = await dbGet('conversations', id);
+    if (conv) {
+      conv.title = name.trim();
+      await dbPut('conversations', conv);
+    }
   }
   const meta = state.conversations.find(x => x.id === id);
   if (meta) meta.title = name.trim();
@@ -567,7 +654,11 @@ async function renameConversation(id) {
 async function deleteConversation(id) {
   const c = state.conversations.find(x => x.id === id);
   if (!confirm(`Padam perbualan "${c ? c.title : ''}"?`)) return;
-  await dbDelete('conversations', id);
+  if (state.user) {
+    await supabase.from('conversations').delete().eq('id', id);
+  } else {
+    await dbDelete('conversations', id);
+  }
   state.conversations = state.conversations.filter(x => x.id !== id);
   if (id === state.currentId) {
     state.currentId = null;
@@ -583,6 +674,7 @@ function ensureConversation() {
   const conv = createLocalConversation('Perbualan Baharu');
   state.currentId = conv.id;
   renderSidebar();
+  if (state.user) return persistConversationCloud(conv, []).then(() => conv.id);
   return Promise.resolve(conv.id);
 }
 
@@ -656,6 +748,11 @@ async function runAssistant() {
     .slice(0, -1)
     .map(m => ({ role: m.role, content: m.content }));
 
+  // V2: Prepend system prompt persona sebagai mesej pertama.
+  //     (Custom prompt hanya disertakan jika ada teks)
+  const sysMsg = buildSystemMessage();
+  if (sysMsg) apiMessages.unshift({ role: 'system', content: sysMsg });
+
   state.controller = new AbortController();
 
   try {
@@ -664,7 +761,8 @@ async function runAssistant() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: apiMessages,
-        stream: true
+        stream: true,
+        model: state.model || undefined
       }),
       signal: state.controller.signal
     });
@@ -910,12 +1008,184 @@ messagesEl.addEventListener('click', (e) => {
 updateSendBtn();
 renderMessages();
 loadAllConversations().catch(() => {});
+loadConfig();
 
-// Tunjukkan model aktif
-fetch('/api/config')
-  .then(r => r.json())
-  .then(cfg => { modelBadge.textContent = cfg.model || 'Bersedia'; })
-  .catch(() => { modelBadge.textContent = 'Bersedia'; });
+/* ============================================================
+   V2 — MODEL DINAMIK & PERSONA
+============================================================ */
+let personas = [];           // dimuat daripada /api/config
+let config = null;           // V3: config penuh (termasuk supabase)
+
+/* Muat konfigurasi (model + persona) daripada /api/config.
+   Senarai dipaparkan secara dinamik; pilihan pengguna disimpan
+   dalam localStorage dan dipulihkan. */
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    const cfg = await res.json();
+    config = cfg;   // V3: simpan untuk init Supabase
+
+    // Senarai model
+    const models = Array.isArray(cfg.models) && cfg.models.length ? cfg.models : [];
+    modelSelect.innerHTML = models.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`).join('');
+
+    // Senarai persona
+    personas = Array.isArray(cfg.personas) ? cfg.personas : [];
+    personaSelect.innerHTML = personas.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
+
+    // Pulih pilihan tersimpan (localStorage)
+    const savedModel = localStorage.getItem('v2_model');
+    state.model = (savedModel && models.some(m => m.id === savedModel))
+      ? savedModel
+      : (cfg.model || (models[0] && models[0].id) || '');
+    if (models.some(m => m.id === state.model)) modelSelect.value = state.model;
+
+    const savedPersona = localStorage.getItem('v2_persona');
+    state.persona = (savedPersona && personas.some(p => p.id === savedPersona))
+      ? savedPersona : 'general';
+    if (personas.some(p => p.id === state.persona)) personaSelect.value = state.persona;
+
+    modelBadge.textContent = models.find(m => m.id === state.model)?.name
+      || cfg.model || 'Bersedia';
+
+    // V3: Mula klien Supabase selepas config siap
+    initSupabase();
+  } catch (e) {
+    modelBadge.textContent = 'Bersedia';
+  }
+}
+
+// Simpan pilihan pengguna setiap kali bertukar
+modelSelect.addEventListener('change', () => {
+  state.model = modelSelect.value;
+  localStorage.setItem('v2_model', state.model);
+  modelBadge.textContent = modelSelect.selectedOptions[0]?.textContent || state.model;
+  showToast('Model ditukar: ' + (modelSelect.selectedOptions[0]?.textContent || state.model));
+});
+
+personaSelect.addEventListener('change', () => {
+  state.persona = personaSelect.value;
+  localStorage.setItem('v2_persona', state.persona);
+  const p = personas.find(x => x.id === state.persona);
+  showToast('Watak ditukar: ' + (p ? p.name : state.persona));
+});
+
+/* Bina system prompt berdasarkan persona terpilih.
+   - Bukan custom: guna prompt persona.
+   - Custom: prompt() untuk minta prompt tersuai; null jika dibatalkan.
+   Return null bermaksud tiada system message perlu dihantar. */
+function buildSystemMessage() {
+  const p = personas.find(x => x.id === state.persona);
+  if (!p) return null;
+
+  if (p.id !== 'custom') {
+    return p.prompt || null;
+  }
+
+  const custom = prompt(
+    'Masukkan system prompt tersuai untuk sesi ini:',
+    localStorage.getItem('v2_custom_prompt') || ''
+  );
+  if (custom === null) return null;          // batal -> pelayan guna prompt lalai
+  const trimmed = custom.trim();
+  if (!trimmed) return null;
+  localStorage.setItem('v2_custom_prompt', trimmed);
+  return trimmed;
+}
+
+
+/* ============================================================
+   V2 — VOICE-TO-TEXT (webkitSpeechRecognition)
+============================================================ */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+// Pilih bahasa yang disokong pelayar (utamakan ms-MY, fallback en-US/en-GB)
+function detectSupportedLangs() {
+  if (!SR) return [];
+  const candidates = ['ms-MY', 'ms', 'en-US', 'en-GB'];
+  const avail = [];
+  try {
+    for (const c of candidates) {
+      const r = new SR();
+      r.lang = c;
+      avail.push(c);
+    }
+  } catch (e) { /* abaikan */ }
+  // Jika pelayar tidak menyokong bahasa khusus, guna lalai pelayar
+  return avail.length === candidates.length ? candidates : [];
+}
+
+let SUPPORTED_LANGS = [];
+let recognition = null;
+
+function toggleListening() {
+  if (!SR) {
+    showToast('Voice input tidak disokong pelayar ini (guna Chrome/Edge)');
+    return;
+  }
+  if (state.listening) {
+    stopListening();
+  } else {
+    startListening();
+  }
+}
+
+function startListening() {
+  try {
+    recognition = new SR();
+  } catch (e) {
+    showToast('Tidak dapat memulakan pengenalan suara');
+    return;
+  }
+
+  if (!SUPPORTED_LANGS.length) SUPPORTED_LANGS = detectSupportedLangs();
+  recognition.lang = SUPPORTED_LANGS[0] || 'ms-MY';
+  recognition.continuous = false;    // berhenti selepas satu frasa
+  recognition.interimResults = true; // papar teks sementara
+  recognition.maxAlternatives = 1;
+
+  const before = inputEl.value;
+  let base = before ? before.replace(/\s+$/, '') + ' ' : '';
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) base += t + ' ';
+      else interim += t;
+    }
+    inputEl.value = (base + interim).replace(/\s+/g, ' ').trim();
+    autoResize();
+    updateSendBtn();
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      showToast('Akses mikrofon dinafikan. Benarkan akses dalam pelayar.');
+    } else if (e.error !== 'aborted') {
+      showToast('Ralat suara: ' + e.error);
+    }
+  };
+
+  recognition.onend = () => {
+    stopListening();
+  };
+
+  state.listening = true;
+  micBtn.classList.add('listening');
+  micBtn.title = 'Berhenti mendengar';
+  recognition.start();
+}
+
+function stopListening() {
+  if (!state.listening) return;
+  state.listening = false;
+  micBtn.classList.remove('listening');
+  micBtn.title = 'Cakap untuk taip (suara)';
+  try { recognition && recognition.stop(); } catch (e) { /* abaikan */ }
+}
+
+micBtn.addEventListener('click', toggleListening);
 
 /* ============================================================
    PWA — INSTALL APP & SERVICE WORKER
@@ -966,6 +1236,202 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
+
+
+/* ============================================================
+   V3 — SUPAABASE: GOOGLE AUTH & CLOUD SYNC
+============================================================ */
+let supabase = null;          // klien Supabase (dimula selepas /api/config)
+let supabaseEnabled = false;  // true jika SUPABASE_URL/ANON_KEY disediakan
+let realtimeChannel = null;
+
+/* Panggil initSupabase() daripada loadConfig() apabila config siap. */
+function initSupabase() {
+  if (!config || !config.supabase || !config.supabase.enabled) return;
+  supabaseEnabled = true;
+  supabase = window.supabase.createClient(
+    config.supabase.url,
+    config.supabase.anon_key
+  );
+
+  // Pulih sesi tersedia (refresh token disimpan secara automatik oleh SDK)
+  supabase.auth.getSession().then(({ data }) => {
+    if (data && data.session) {
+      setUser(data.session.user, data.session);
+    }
+    renderAuthUI();
+  });
+
+  // Pantau perubahan status auth (log masuk / log keluar / token refresh)
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      setUser(session.user, session);
+    } else if (event === 'SIGNED_OUT') {
+      setUser(null, null);
+    }
+    renderAuthUI();
+  });
+}
+
+function renderAuthUI() {
+  const loggedIn = !!state.user;
+  const guestEl = $('authGuest');
+  const userEl = $('authUser');
+  const syncBadge = $('syncBadge');
+  if (!guestEl || !userEl) return;
+
+  if (loggedIn) {
+    guestEl.classList.add('hidden');
+    userEl.classList.remove('hidden');
+    syncBadge.classList.remove('hidden');
+    syncBadge.classList.add('flex');
+
+    const name = state.user.user_metadata?.full_name
+      || state.user.user_metadata?.name
+      || (state.user.email ? state.user.email.split('@')[0] : 'Pengguna');
+    $('userName').textContent = name;
+    $('userEmail').textContent = state.user.email || '';
+
+    const avatarUrl = state.user.user_metadata?.avatar_url
+      || state.user.user_metadata?.picture;
+    const avatar = $('userAvatar');
+    if (avatarUrl) {
+      avatar.innerHTML = `<img src="${escapeHtml(avatarUrl)}" class="w-full h-full object-cover" alt="avatar" referrerpolicy="no-referrer" />`;
+    } else {
+      avatar.innerHTML = `<span>${escapeHtml((name[0] || 'U').toUpperCase())}</span>`;
+    }
+  } else {
+    guestEl.classList.remove('hidden');
+    userEl.classList.add('hidden');
+    syncBadge.classList.add('hidden');
+    syncBadge.classList.remove('flex');
+  }
+}
+
+/* Tetapkan pengguna aktif; muat semula sejarah dari sumber yang betul. */
+async function setUser(user, session) {
+  state.user = user || null;
+  state.currentId = null;
+  state.messages = [];
+  state.attachedImages = [];
+  clearImagePreviews();
+  convTitleEl.textContent = 'Perbualan Baharu';
+  renderMessages();
+
+  unsubscribeRealtime();
+  if (state.user) {
+    subscribeRealtime();
+  }
+  await loadAllConversations();
+}
+
+async function googleSignIn() {
+  if (!supabaseEnabled) {
+    showToast('Supabase belum dikonfigurasikan pada pelayan (.env)');
+    return;
+  }
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin + '/' },
+  });
+  if (error) showToast('Log masuk gagal: ' + error.message);
+}
+
+async function signOut() {
+  if (!supabase) return;
+  await supabase.auth.signOut();
+  showToast('Telah log keluar');
+}
+
+function subscribeRealtime() {
+  if (!supabase || realtimeChannel) return;
+  // Channel tunggal; penapis RLS memastikan hanya data sendiri diterima.
+  realtimeChannel = supabase
+    .channel('conversations-realtime')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'conversations' },
+      () => { refreshSidebar(); }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'messages' },
+      () => { refreshSidebar(); }
+    )
+    .subscribe();
+}
+
+function unsubscribeRealtime() {
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+}
+
+/* Muat semula senarai perbualan dari Supabase. */
+async function loadAllConversationsCloud() {
+  if (!supabase) return;
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('id,title,updated_at')
+    .order('updated_at', { ascending: false });
+  if (error) {
+    showToast('Gagal muat sejarah awan: ' + error.message);
+    return;
+  }
+  state.conversations = (data || []).map(c => ({
+    id: c.id,
+    title: c.title,
+    updatedAt: c.updated_at || 0,
+  }));
+  renderSidebar();
+}
+
+/* Simpan meta perbualan + mesejnya ke Supabase (upsert). */
+async function persistConversationCloud(conv, messages) {
+  if (!supabase) return;
+  const convErr = await supabase
+    .from('conversations')
+    .upsert({
+      id: conv.id,
+      title: conv.title,
+      updated_at: conv.updatedAt || Date.now(),
+    });
+  if (convErr.error) {
+    showToast('Gagal simpan perbualan ke awan: ' + convErr.error.message);
+    return;
+  }
+  if (messages.length) {
+    const rows = messages.map((m, i) => ({
+      conversation_id: conv.id,
+      idx: i,
+      role: m.role,
+      content: m.content,
+    }));
+    const msgErr = await supabase.from('messages').upsert(rows, { onConflict: 'conversation_id,idx' });
+    if (msgErr.error) {
+      showToast('Gagal simpan mesej ke awan: ' + msgErr.error.message);
+    }
+  }
+}
+
+/* Muat mesej bagi satu perbualan dari Supabase. */
+async function fetchMessagesCloud(conversationId) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('role,content')
+    .eq('conversation_id', conversationId)
+    .order('idx', { ascending: true });
+  if (error) {
+    showToast('Gagal muat mesej awan: ' + error.message);
+    return [];
+  }
+  return (data || []).map(m => ({ role: m.role, content: m.content }));
+}
+
+/* Event listeners auth */
+$('googleSignInBtn').addEventListener('click', googleSignIn);
+$('signOutBtn').addEventListener('click', signOut);
 </script>
 </body>
 </html>
