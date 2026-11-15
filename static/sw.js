@@ -1,4 +1,4 @@
-const CACHE = 'ai-chat-v1';
+const CACHE = 'ai-chat-v3';
 const ASSETS = [
   '/',
   '/manifest.json',
@@ -27,11 +27,33 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  // Jangan cache panggilan API (sentiasa ambil daripada rangkaian)
-  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/')) {
+
+  // Jangan sentuh: API dinamik, permintaan cross-origin (Supabase/Google OAuth, CDN)
+  // supaya Service Worker tidak merosakkan aliran log masuk Google.
+  if (
+    event.request.method !== 'GET' ||
+    url.origin !== self.location.origin ||
+    url.pathname.startsWith('/api/')
+  ) {
     return;
   }
 
+  // Navigasi (halaman utama): rangkaian dahulu supaya sentiasa dapat versi terkini,
+  // fallback ke cache hanya apabila offline.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Aset statik: stale-while-revalidate
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const fetched = fetch(event.request)

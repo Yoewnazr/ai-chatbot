@@ -6,7 +6,7 @@
 -- 1) Jadual perbualan (diikat dengan user_id dari Supabase Auth)
 create table if not exists public.conversations (
   id         uuid primary key,
-  user_id    uuid not null references auth.users (id) on delete cascade,
+  user_id    uuid not null default auth.uid() references auth.users (id) on delete cascade,
   title      text not null default 'Perbualan Baharu',
   updated_at bigint not null default (extract(epoch from now()) * 1000)::bigint
 );

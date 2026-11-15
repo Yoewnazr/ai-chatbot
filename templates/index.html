@@ -637,7 +637,14 @@ async function renameConversation(id) {
   if (!name || !name.trim()) return;
 
   if (state.user) {
-    await supabase.from('conversations').update({ title: name.trim() }).eq('id', id);
+    const { error } = await supabase
+      .from('conversations')
+      .update({ title: name.trim(), updated_at: Date.now() })
+      .eq('id', id);
+    if (error) {
+      showToast('Gagal menamakan semula: ' + error.message);
+      return;
+    }
   } else {
     const conv = await dbGet('conversations', id);
     if (conv) {
@@ -655,7 +662,11 @@ async function deleteConversation(id) {
   const c = state.conversations.find(x => x.id === id);
   if (!confirm(`Padam perbualan "${c ? c.title : ''}"?`)) return;
   if (state.user) {
-    await supabase.from('conversations').delete().eq('id', id);
+    const { error } = await supabase.from('conversations').delete().eq('id', id);
+    if (error) {
+      showToast('Gagal memadam: ' + error.message);
+      return;
+    }
   } else {
     await dbDelete('conversations', id);
   }
@@ -1248,6 +1259,10 @@ let realtimeChannel = null;
 /* Panggil initSupabase() daripada loadConfig() apabila config siap. */
 function initSupabase() {
   if (!config || !config.supabase || !config.supabase.enabled) return;
+  if (!window.supabase) {
+    showToast('Gagal memuat Supabase SDK (semak sambungan internet / CDN)');
+    return;
+  }
   supabaseEnabled = true;
   supabase = window.supabase.createClient(
     config.supabase.url,
@@ -1278,7 +1293,7 @@ function renderAuthUI() {
   const guestEl = $('authGuest');
   const userEl = $('authUser');
   const syncBadge = $('syncBadge');
-  if (!guestEl || !userEl) return;
+  if (!guestEl || !userEl || !syncBadge) return;
 
   if (loggedIn) {
     guestEl.classList.add('hidden');
@@ -1394,6 +1409,7 @@ async function persistConversationCloud(conv, messages) {
     .from('conversations')
     .upsert({
       id: conv.id,
+      user_id: state.user?.id,   // WAJIB: lajur user_id NOT NULL di pangkalan data
       title: conv.title,
       updated_at: conv.updatedAt || Date.now(),
     });
@@ -1401,6 +1417,13 @@ async function persistConversationCloud(conv, messages) {
     showToast('Gagal simpan perbualan ke awan: ' + convErr.error.message);
     return;
   }
+  // Padam mesej basi (idx >= panjang semasa) supaya "jana semula" atau pemadaman
+  // separa tidak meninggalkan mesej hantu dalam pangkalan data.
+  await supabase
+    .from('messages')
+    .delete()
+    .eq('conversation_id', conv.id)
+    .gte('idx', messages.length);
   if (messages.length) {
     const rows = messages.map((m, i) => ({
       conversation_id: conv.id,
